@@ -86,6 +86,42 @@ impl Iterator for AVCodecIter {
     }
 }
 
+// FFmpeg 9 removed the capability arrays of `AVCodec`. `avcodec_get_supported_config()` replaces them.
+#[cfg(feature = "ffmpeg9")]
+impl<'codec> AVCodec {
+    /// Return supported framerates of this [`AVCodec`].
+    pub fn supported_framerates(&'codec self) -> Option<&'codec [AVRational]> {
+        unsafe { self.supported(ffi::AV_CODEC_CONFIG_FRAME_RATE) }
+    }
+
+    /// Return supported pix_fmts of this [`AVCodec`].
+    pub fn pix_fmts(&'codec self) -> Option<&'codec [AVPixelFormat]> {
+        unsafe { self.supported(ffi::AV_CODEC_CONFIG_PIX_FORMAT) }
+    }
+
+    /// Return supported samplerates of this [`AVCodec`].
+    pub fn supported_samplerates(&'codec self) -> Option<&'codec [i32]> {
+        unsafe { self.supported(ffi::AV_CODEC_CONFIG_SAMPLE_RATE) }
+    }
+
+    /// Return supported sample_fmts of this [`AVCodec`].
+    pub fn sample_fmts(&'codec self) -> Option<&'codec [AVSampleFormat]> {
+        unsafe { self.supported(ffi::AV_CODEC_CONFIG_SAMPLE_FORMAT) }
+    }
+
+    /// `None` keeps the meaning of the removed null arrays: all values are
+    /// supported, or `config` doesn't apply to the codec's media type.
+    ///
+    /// # Safety
+    /// `config` should match `T`
+    unsafe fn supported<T>(&'codec self, config: AVCodecConfig) -> Option<&'codec [T]> {
+        unsafe { supported_config(ptr::null(), self.as_ptr(), config) }
+            .ok()
+            .flatten()
+    }
+}
+
+#[cfg(not(feature = "ffmpeg9"))]
 impl<'codec> AVCodec {
     /// Return supported framerates of this [`AVCodec`].
     pub fn supported_framerates(&'codec self) -> Option<&'codec [AVRational]> {
@@ -110,6 +146,23 @@ impl<'codec> AVCodec {
         // terminates with -1
         unsafe { build_array(self.sample_fmts, -1) }
     }
+}
+
+/// Wraps `avcodec_get_supported_config()`, `Ok(None)` means all values are supported.
+///
+/// # Safety
+/// `avctx` and `codec` should be valid or null, not both null; `config` should match `T`
+#[cfg(feature = "ffmpeg7_1")]
+unsafe fn supported_config<'a, T>(
+    avctx: *const ffi::AVCodecContext,
+    codec: *const ffi::AVCodec,
+    config: AVCodecConfig,
+) -> Result<Option<&'a [T]>> {
+    let mut data = ptr::null();
+    let mut num = 0;
+    unsafe { ffi::avcodec_get_supported_config(avctx, codec, config, 0, &mut data, &mut num) }
+        .upgrade()?;
+    Ok((!data.is_null()).then(|| unsafe { slice::from_raw_parts(data.cast(), num as usize) }))
 }
 
 impl Drop for AVCodec {
@@ -368,24 +421,8 @@ impl AVCodecContext {
         codec: Option<&AVCodec>,
         config: AVCodecConfig,
     ) -> Result<&[T]> {
-        let mut data = ptr::null();
-        let mut num = 0;
-        unsafe {
-            ffi::avcodec_get_supported_config(
-                self.as_ptr(),
-                codec.map(|x| x.as_ptr()).unwrap_or_else(ptr::null),
-                config,
-                0,
-                &mut data,
-                &mut num,
-            )
-        }
-        .upgrade()?;
-        Ok(if data.is_null() {
-            &[]
-        } else {
-            unsafe { slice::from_raw_parts(data.cast(), num as usize) }
-        })
+        let codec = codec.map(|x| x.as_ptr()).unwrap_or_else(ptr::null);
+        Ok(unsafe { supported_config(self.as_ptr(), codec, config) }?.unwrap_or_default())
     }
 
     /// Is hardware accelaration enabled in this codec context.

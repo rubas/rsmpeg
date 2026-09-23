@@ -36,7 +36,8 @@ impl Drop for AVChannelLayout {
 
 impl Clone for AVChannelLayout {
     fn clone(&self) -> Self {
-        let mut layout = MaybeUninit::<ffi::AVChannelLayout>::uninit();
+        // `av_channel_layout_copy` uninits `dst` first, so it must be a valid layout.
+        let mut layout = MaybeUninit::<ffi::AVChannelLayout>::zeroed();
         // unwrap: this function only fail on OOM.
         unsafe { ffi::av_channel_layout_copy(layout.as_mut_ptr(), self.as_ptr()) }
             .upgrade()
@@ -262,5 +263,22 @@ mod tests {
             assert!(!item.describe().unwrap().to_str().unwrap().is_empty())
         }
         assert_eq!(item.describe().unwrap().to_str().unwrap(), "22.2");
+    }
+
+    #[test]
+    fn channel_layout_clone_test() {
+        // A custom order layout owns a heap allocated channel map.
+        let layout = AVChannelLayout::from_string(c"FL@Left+FR@Right").unwrap();
+        assert_eq!(layout.order, ffi::AV_CHANNEL_ORDER_CUSTOM);
+        // The second clone reuses the stack slot the first clone left its copy in.
+        let a = layout.clone();
+        let b = layout.clone();
+        for x in [&a, &b] {
+            assert!(x.equal(&layout).unwrap());
+            assert_eq!(
+                x.describe().unwrap().to_str().unwrap(),
+                "2 channels (FL@Left+FR@Right)"
+            );
+        }
     }
 }

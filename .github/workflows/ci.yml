@@ -90,7 +90,7 @@ jobs:
           VCPKG_ROOT: ${{ github.workspace }}/vcpkg
           LIBCLANG_PATH: ${{ github.workspace }}/clang/lib
           LLVM_CONFIG_PATH: ${{ github.workspace }}/clang/bin/llvm-config
-        run: cargo clippy --no-default-features --features ffmpeg7_1,link_vcpkg_ffmpeg -- -D warnings
+        run: cargo clippy --no-default-features --features ffmpeg9,link_vcpkg_ffmpeg -- -D warnings
 
   build_static_and_test_ubuntu:
     runs-on: ubuntu-latest

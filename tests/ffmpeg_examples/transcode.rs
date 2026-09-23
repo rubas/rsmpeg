@@ -270,7 +270,12 @@ fn init_filter<'graph>(
                 )
                 .context("Cannot set output sample format")?;
             buffersink_ctx
-                .opt_set(c"channel_layouts", &enc_ctx.ch_layout().describe().unwrap())
+                .opt_set_array(
+                    c"channel_layouts",
+                    0,
+                    Some(&[enc_ctx.ch_layout]),
+                    ffi::AV_OPT_TYPE_CHLAYOUT,
+                )
                 .context("Cannot set output channel layout")?;
             buffersink_ctx
                 .opt_set_array(
@@ -603,4 +608,38 @@ fn transcode_test5() {
 
     // Ensure `dict` is consumed.
     assert!(dict.is_none());
+}
+
+#[test]
+fn init_filter_custom_channel_layout_test() {
+    // The channel name contains `,`, the separator of the buffersink array options.
+    let ch_layout = c"FL@Left,Main+FR@Right";
+    let codec = AVCodec::find_decoder(ffi::AV_CODEC_ID_PCM_S16LE).unwrap();
+    let mut dec_ctx = AVCodecContext::new(&codec);
+    dec_ctx.set_pkt_timebase(ra(1, 48000));
+    dec_ctx.set_sample_rate(48000);
+    dec_ctx.set_sample_fmt(ffi::AV_SAMPLE_FMT_S16);
+    dec_ctx.set_ch_layout(
+        AVChannelLayout::from_string(ch_layout)
+            .unwrap()
+            .into_inner(),
+    );
+    let codec = AVCodec::find_encoder(ffi::AV_CODEC_ID_PCM_S16LE).unwrap();
+    let mut enc_ctx = AVCodecContext::new(&codec);
+    enc_ctx.set_sample_rate(48000);
+    enc_ctx.set_sample_fmt(ffi::AV_SAMPLE_FMT_S16);
+    enc_ctx.set_ch_layout(
+        AVChannelLayout::from_string(ch_layout)
+            .unwrap()
+            .into_inner(),
+    );
+
+    let mut filter_graph = AVFilterGraph::new();
+    let filter_ctx = init_filter(&mut filter_graph, &mut dec_ctx, &mut enc_ctx, c"anull").unwrap();
+
+    let sink_ch_layout = filter_ctx.buffersink_ctx.get_ch_layout();
+    assert_eq!(
+        sink_ch_layout.describe().unwrap().to_str().unwrap(),
+        "2 channels (FL@Left,Main+FR@Right)"
+    );
 }

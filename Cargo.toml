@@ -37,6 +37,8 @@ ffmpeg7 = ["ffmpeg6", "rusty_ffmpeg/ffmpeg7"]
 # ffmpeg 7.1+
 ffmpeg7_1 = ["ffmpeg7"]
 ffmpeg8 = ["ffmpeg7_1", "rusty_ffmpeg/ffmpeg8"]
+# rusty_ffmpeg has no ffmpeg9 feature yet; FFmpeg 9 builds on its FFmpeg 8.1 constants.
+ffmpeg9 = ["ffmpeg8", "rusty_ffmpeg/ffmpeg8_1"]
 
 # Try linking ffmpeg with pkg-config.
 link_system_ffmpeg = ["rusty_ffmpeg/link_system_ffmpeg"]

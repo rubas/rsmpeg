@@ -197,8 +197,18 @@ fn init_filter<'graph>(
             .alloc_filter_context(&buffersink, c"out")
             .context("Cannot create buffer sink")?;
 
+        #[cfg(not(feature = "ffmpeg8"))]
         buffer_sink_context
             .opt_set_bin(c"pix_fmts", &enc_ctx.pix_fmt)
+            .context("Cannot set output pixel format")?;
+        #[cfg(feature = "ffmpeg8")]
+        buffer_sink_context
+            .opt_set_array(
+                c"pixel_formats",
+                0,
+                Some(&[enc_ctx.pix_fmt]),
+                ffi::AV_OPT_TYPE_PIXEL_FMT,
+            )
             .context("Cannot set output pixel format")?;
 
         buffer_sink_context
@@ -237,15 +247,40 @@ fn init_filter<'graph>(
         let mut buffersink_ctx = filter_graph
             .alloc_filter_context(&buffersink, c"out")
             .context("Cannot create audio buffer sink")?;
-        buffersink_ctx
-            .opt_set_bin(c"sample_fmts", &enc_ctx.sample_fmt)
-            .context("Cannot set output sample format")?;
-        buffersink_ctx
-            .opt_set(c"ch_layouts", &enc_ctx.ch_layout().describe().unwrap())
-            .context("Cannot set output channel layout")?;
-        buffersink_ctx
-            .opt_set_bin(c"sample_rates", &enc_ctx.sample_rate)
-            .context("Cannot set output sample rate")?;
+        #[cfg(not(feature = "ffmpeg8"))]
+        {
+            buffersink_ctx
+                .opt_set_bin(c"sample_fmts", &enc_ctx.sample_fmt)
+                .context("Cannot set output sample format")?;
+            buffersink_ctx
+                .opt_set(c"ch_layouts", &enc_ctx.ch_layout().describe().unwrap())
+                .context("Cannot set output channel layout")?;
+            buffersink_ctx
+                .opt_set_bin(c"sample_rates", &enc_ctx.sample_rate)
+                .context("Cannot set output sample rate")?;
+        }
+        #[cfg(feature = "ffmpeg8")]
+        {
+            buffersink_ctx
+                .opt_set_array(
+                    c"sample_formats",
+                    0,
+                    Some(&[enc_ctx.sample_fmt]),
+                    ffi::AV_OPT_TYPE_SAMPLE_FMT,
+                )
+                .context("Cannot set output sample format")?;
+            buffersink_ctx
+                .opt_set(c"channel_layouts", &enc_ctx.ch_layout().describe().unwrap())
+                .context("Cannot set output channel layout")?;
+            buffersink_ctx
+                .opt_set_array(
+                    c"samplerates",
+                    0,
+                    Some(&[enc_ctx.sample_rate]),
+                    ffi::AV_OPT_TYPE_INT,
+                )
+                .context("Cannot set output sample rate")?;
+        }
 
         // `av_buffersink_set_frame_size` will SIGSEGV even on FFmpeg 7.1, problem persists until
         // https://github.com/FFmpeg/FFmpeg/commit/6b402cdbf46e4398b3285277f3ff7c3654d57ce6.

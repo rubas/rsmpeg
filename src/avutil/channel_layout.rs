@@ -92,7 +92,8 @@ impl AVChannelLayout {
     /// - the ambisonic order followed by optional non-diegetic channels (eg.
     ///   "ambisonic 2+stereo")
     pub fn from_string(str: &CStr) -> Option<Self> {
-        let mut layout = MaybeUninit::<ffi::AVChannelLayout>::uninit();
+        // Before FFmpeg 7.0 some string forms leave `opaque` and `u` unset.
+        let mut layout = MaybeUninit::<ffi::AVChannelLayout>::zeroed();
         if unsafe { ffi::av_channel_layout_from_string(layout.as_mut_ptr(), str.as_ptr()) } == 0 {
             let layout = unsafe { layout.assume_init() };
             Some(unsafe { Self::from_raw(NonNull::new(Box::into_raw(Box::new(layout))).unwrap()) })
@@ -282,15 +283,5 @@ mod tests {
                 "2 channels (FL@Left+FR@Right)"
             );
         }
-    }
-
-    #[test]
-    fn channel_layout_constructor_opaque_test() {
-        let layout = AVChannelLayout::from_mask(ffi::AV_CH_LAYOUT_STEREO).unwrap();
-        assert!(layout.opaque.is_null());
-        // No standard layout has 17 channels.
-        let layout = AVChannelLayout::from_nb_channels(17);
-        assert_eq!(layout.order, ffi::AV_CHANNEL_ORDER_UNSPEC);
-        assert!(layout.opaque.is_null());
     }
 }

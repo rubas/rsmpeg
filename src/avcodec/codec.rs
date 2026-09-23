@@ -531,4 +531,24 @@ mod tests {
             println!("codec: {:?}: {:?}", codec.name(), codec.long_name());
         }
     }
+
+    #[test]
+    fn test_av_codec_supported_config() {
+        // A config for another media type is `None`.
+        let aac = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC).unwrap();
+        assert_eq!(aac.pix_fmts(), None);
+        // A codec that supports all values is `None`.
+        let rawvideo = AVCodec::find_encoder_by_name(c"rawvideo").unwrap();
+        assert_eq!(rawvideo.pix_fmts(), None);
+
+        let mpeg1 = AVCodec::find_encoder(ffi::AV_CODEC_ID_MPEG1VIDEO).unwrap();
+        let framerates = mpeg1.supported_framerates().unwrap();
+        assert_eq!((framerates[0].num, framerates[0].den), (24000, 1001));
+        let s302m = AVCodec::find_encoder_by_name(c"s302m").unwrap();
+        assert_eq!(s302m.supported_samplerates(), Some(&[48000][..]));
+        assert_eq!(
+            s302m.sample_fmts(),
+            Some(&[ffi::AV_SAMPLE_FMT_S32, ffi::AV_SAMPLE_FMT_S16][..])
+        );
+    }
 }
